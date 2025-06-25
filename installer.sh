@@ -407,3 +407,4 @@ log_success "Installation complete! 🎉"
 echo
 echo -e "${CYAN}For more information and troubleshooting:${NC}"
 echo -e "https://github.com/grll/claude-code-login"
+echo -e "https://github.com/grll/claude-code-action"
