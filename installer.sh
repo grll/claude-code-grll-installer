@@ -1,0 +1,387 @@
+#!/bin/bash
+
+# Claude Code OAuth Installer Script
+# by @grll
+
+set -e
+
+# Color definitions
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
+MAGENTA='\033[0;35m'
+CYAN='\033[0;36m'
+WHITE='\033[1;37m'
+BOLD='\033[1m'
+NC='\033[0m' # No Color
+
+# Logging functions
+log_info() {
+    echo -e "${CYAN}ℹ ${WHITE}$1${NC}"
+}
+
+log_success() {
+    echo -e "${GREEN}✓ ${WHITE}$1${NC}"
+}
+
+log_warning() {
+    echo -e "${YELLOW}⚠ ${WHITE}$1${NC}"
+}
+
+log_error() {
+    echo -e "${RED}✗ ${WHITE}$1${NC}"
+}
+
+log_step() {
+    echo -e "${MAGENTA}${BOLD}▶ $1${NC}"
+}
+
+# ASCII Art Header
+show_header() {
+    clear
+    echo -e "${CYAN}"
+    cat << 'EOF'
+╔══════════════════════════════════════════════════════════════════════════╗
+║                                                                          ║
+║                        ✨ Claude Code OAuth (by @grll) ✨                ║
+║                                                                          ║
+╚══════════════════════════════════════════════════════════════════════════╝
+
+     ░██████╗░  ░██████╗░  ░██╗░░░░░  ░██╗░░░░░
+     ██╔════╝░  ░██╔══██╗  ░██║░░░░░  ░██║░░░░░
+     ██║░░██╗░  ░██████╔╝  ░██║░░░░░  ░██║░░░░░
+     ██║░░╚██╗  ░██╔══██╗  ░██║░░░░░  ░██║░░░░░
+     ╚██████╔╝  ░██║░░██║  ░███████╗  ░███████╗
+     ░╚═════╝░  ░╚═╝░░╚═╝  ░╚══════╝  ░╚══════╝
+
+EOF
+    echo -e "${NC}"
+}
+
+# Parse command line arguments
+REPO_ARG=""
+while [[ $# -gt 0 ]]; do
+    case $1 in
+        --repo)
+            REPO_ARG="$2"
+            shift 2
+            ;;
+        *)
+            log_error "Unknown option: $1"
+            echo "Usage: $0 [--repo owner/repo-name]"
+            exit 1
+            ;;
+    esac
+done
+
+# Show header
+show_header
+
+# Step 1: Check gh CLI installation
+log_step "STEP 1: Checking GitHub CLI Installation"
+if ! command -v gh &> /dev/null; then
+    log_error "GitHub CLI (gh) is not installed or not in PATH"
+    echo
+    log_info "Please install GitHub CLI first:"
+    echo "  • Visit: https://cli.github.com/"
+    echo "  • Or use: brew install gh (macOS) or apt install gh (Ubuntu)"
+    exit 1
+fi
+log_success "GitHub CLI is installed"
+
+# Check jq installation
+if ! command -v jq &> /dev/null; then
+    log_error "jq is not installed or not in PATH"
+    echo
+    log_info "Please install jq first:"
+    echo "  • Visit: https://jqlang.github.io/jq/"
+    echo "  • Or use: brew install jq (macOS) or apt install jq (Ubuntu)"
+    exit 1
+fi
+log_success "jq is installed"
+
+# Step 2: Get GitHub username
+log_step "STEP 2: Getting GitHub Username"
+GITHUB_USERNAME=$(gh api user | jq -r '.login' 2>/dev/null)
+if [ $? -ne 0 ] || [ "$GITHUB_USERNAME" = "null" ] || [ -z "$GITHUB_USERNAME" ]; then
+    log_error "Failed to get GitHub username. Please ensure you're logged in to GitHub CLI"
+    echo
+    log_info "Run: gh auth login"
+    exit 1
+fi
+log_success "Authenticated as: $GITHUB_USERNAME"
+
+# Step 3: Repository detection/selection
+log_step "STEP 3: Repository Setup"
+if [ -n "$REPO_ARG" ]; then
+    REPO_NAME="$REPO_ARG"
+    log_info "Using repository from --repo flag: $REPO_NAME"
+else
+    # Try to get current repo
+    CURRENT_REPO=$(gh repo view --json name -q ".name" 2>/dev/null)
+    if [ $? -eq 0 ] && [ -n "$CURRENT_REPO" ]; then
+        REPO_OWNER=$(gh repo view --json owner -q ".owner.login" 2>/dev/null)
+        REPO_NAME="${REPO_OWNER}/${CURRENT_REPO}"
+        log_success "Found current repository: $REPO_NAME"
+    else
+        log_warning "No current repository found"
+        echo
+        echo -e "${BOLD}Please enter repository name (format: owner/repo-name):${NC}"
+        echo -e "${CYAN}Example: $GITHUB_USERNAME/claude-code-login${NC}"
+        read -p "Repository: " REPO_NAME
+        
+        if [ -z "$REPO_NAME" ]; then
+            log_error "Repository name cannot be empty"
+            exit 1
+        fi
+        
+        # Validate repository format
+        if [[ ! "$REPO_NAME" =~ ^[^/]+/[^/]+$ ]]; then
+            log_error "Invalid repository format. Use: owner/repo-name"
+            exit 1
+        fi
+    fi
+fi
+
+# Verify repository exists
+log_info "Verifying repository access: $REPO_NAME"
+if ! gh repo view "$REPO_NAME" &>/dev/null; then
+    log_error "Cannot access repository: $REPO_NAME"
+    echo
+    log_info "Please ensure:"
+    echo "  • The repository exists"
+    echo "  • You have access to the repository"
+    echo "  • You're authenticated with the correct GitHub account"
+    exit 1
+fi
+log_success "Repository verified: $REPO_NAME"
+
+# Step 4: Check for existing secret
+log_step "STEP 4: Checking Repository Secrets"
+SECRET_EXISTS=false
+if gh secret list --repo "$REPO_NAME" | grep -q "SECRETS_ADMIN_PAT"; then
+    SECRET_EXISTS=true
+    log_success "SECRETS_ADMIN_PAT already exists"
+else
+    log_warning "SECRETS_ADMIN_PAT not found"
+    echo
+    echo -e "${BOLD}You need to provide a Personal Access Token (PAT) for secrets management.${NC}"
+    echo
+    log_info "How to create a SECRETS_ADMIN_PAT:"
+    echo "  • Visit: https://github.com/grll/claude-code-login?tab=readme-ov-file#prerequisites-setting-up-secrets_admin_pat"
+    echo
+    echo -e "${BOLD}Enter your SECRETS_ADMIN_PAT (input will be hidden):${NC}"
+    read -s PAT_TOKEN
+    echo
+    
+    if [ -z "$PAT_TOKEN" ]; then
+        log_error "Personal Access Token cannot be empty"
+        exit 1
+    fi
+    
+    # Set the secret
+    log_info "Setting SECRETS_ADMIN_PAT secret..."
+    if echo "$PAT_TOKEN" | gh secret set SECRETS_ADMIN_PAT --repo "$REPO_NAME"; then
+        log_success "SECRETS_ADMIN_PAT secret has been set"
+    else
+        log_error "Failed to set SECRETS_ADMIN_PAT secret"
+        exit 1
+    fi
+fi
+
+# Step 5: Create workflows directory
+log_step "STEP 5: Creating GitHub Workflows"
+mkdir -p .github/workflows
+
+# Create claude_code_login.yml
+log_info "Creating claude_code_login.yml..."
+cat > .github/workflows/claude_code_login.yml << 'EOF'
+name: Claude OAuth
+
+on:
+  workflow_dispatch:
+    inputs:
+      code:
+        description: 'Authorization code (leave empty for step 1)'
+        required: false
+
+permissions:
+  actions: write  # Required for cache management
+  contents: read  # Required for basic repository access
+
+jobs:
+  auth:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: grll/claude-code-login@v1
+        with:
+          code: ${{ inputs.code }}
+          secrets_admin_pat: ${{ secrets.SECRETS_ADMIN_PAT }}
+EOF
+
+log_success "Created claude_code_login.yml"
+
+# Create claude_code.yml with username replacement
+log_info "Creating claude_code.yml..."
+cat > .github/workflows/claude_code.yml << EOF
+name: Claude PR Assistant - Authorized Users Only
+
+on:
+  issue_comment:
+    types: [created]
+  pull_request_review_comment:
+    types: [created]
+  issues:
+    types: [opened, assigned]
+  pull_request_review:
+    types: [submitted]
+
+jobs:
+  claude-code-action:
+    # Only respond to @claude mentions from $GITHUB_USERNAME
+    if: |
+      (
+        (github.event_name == 'issue_comment' && contains(github.event.comment.body, '@claude')) ||
+        (github.event_name == 'pull_request_review_comment' && contains(github.event.comment.body, '@claude')) ||
+        (github.event_name == 'pull_request_review' && contains(github.event.review.body, '@claude')) ||
+        (github.event_name == 'issues' && contains(github.event.issue.body, '@claude'))
+      ) && github.actor == '$GITHUB_USERNAME'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+      issues: read
+      id-token: write
+      actions: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Run Claude PR Action
+        uses: ./
+        with:
+          use_oauth: true
+          claude_access_token: \${{ secrets.CLAUDE_ACCESS_TOKEN }}
+          claude_refresh_token: \${{ secrets.CLAUDE_REFRESH_TOKEN }}
+          claude_expires_at: \${{ secrets.CLAUDE_EXPIRES_AT }}
+          secrets_admin_pat: \${{ secrets.SECRETS_ADMIN_PAT }}
+          timeout_minutes: "60"
+EOF
+
+log_success "Created claude_code.yml"
+
+# Step 6: Git operations - stash, commit, and push
+log_step "STEP 6: Committing and Pushing Workflows"
+
+# Check if we're in a git repository
+if ! git rev-parse --git-dir > /dev/null 2>&1; then
+    log_info "Not in a git repository, initializing..."
+    git init
+    log_success "Git repository initialized"
+fi
+
+# Stash any existing changes
+log_info "Stashing existing changes..."
+STASH_RESULT=$(git stash push -m "Pre-Claude-OAuth-setup stash" 2>&1)
+if echo "$STASH_RESULT" | grep -q "No local changes to save"; then
+    STASH_CREATED=false
+    log_info "No existing changes to stash"
+else
+    STASH_CREATED=true
+    log_success "Existing changes stashed"
+fi
+
+# Add the workflow files
+log_info "Adding workflow files to git..."
+git add .github/workflows/claude_code_login.yml .github/workflows/claude_code.yml
+
+# Check if there are changes to commit
+if git diff --cached --quiet; then
+    log_warning "No changes to commit (workflows may already exist)"
+else
+    # Commit the changes
+    log_info "Committing workflow files..."
+    git commit -m "Add Claude Code OAuth workflows
+
+- claude_code_login.yml: OAuth authentication workflow
+- claude_code.yml: PR assistant workflow for @$GITHUB_USERNAME
+
+🤖 Generated with Claude Code GRLL Installer
+
+Co-authored-by: grll <noreply@github.com>"
+    
+    log_success "Workflows committed"
+    
+    # Push to remote
+    log_info "Pushing to remote repository..."
+    
+    # Check if we have a remote
+    if ! git remote | grep -q origin; then
+        log_warning "No remote 'origin' found. You may need to set up a remote and push manually."
+        log_info "To set up remote: git remote add origin https://github.com/$REPO_NAME.git"
+    else
+        # Get current branch
+        CURRENT_BRANCH=$(git branch --show-current)
+        if [ -z "$CURRENT_BRANCH" ]; then
+            CURRENT_BRANCH="main"
+        fi
+        
+        # Try to push
+        if git push origin "$CURRENT_BRANCH"; then
+            log_success "Workflows pushed to remote repository"
+        else
+            log_warning "Failed to push. You may need to push manually:"
+            echo "  git push origin $CURRENT_BRANCH"
+        fi
+    fi
+fi
+
+# Pop stashed changes if we created a stash
+if [ "$STASH_CREATED" = true ]; then
+    log_info "Restoring stashed changes..."
+    if git stash pop; then
+        log_success "Stashed changes restored"
+    else
+        log_warning "Failed to restore stashed changes. Check 'git stash list'"
+    fi
+fi
+
+# Step 7: Final instructions
+echo
+echo -e "${CYAN}   ─────────────────────────────────────────────────────────────────────${NC}"
+echo -e "${CYAN}                       【 STEP 1: Generate Login URL 】${NC}"
+echo -e "${CYAN}   ───────────────────────────────────────────────────────────────────────${NC}"
+echo
+log_step "SETUP COMPLETE! Next Steps:"
+echo
+echo -e "${BOLD}1. Run the OAuth workflow (without code):${NC}"
+echo -e "   • Go to: https://github.com/$REPO_NAME/actions/workflows/claude_code_login.yml"
+echo -e "   • Click ${GREEN}'Run workflow'${NC} → ${GREEN}'Run workflow'${NC} (leave code empty)"
+echo
+echo -e "${BOLD}2. Get the login URL:${NC}"
+echo -e "   • Wait for the workflow to complete"
+echo -e "   • Click on the workflow run"
+echo -e "   • Look for the login URL in the action summary"
+echo
+echo -e "${BOLD}3. Authenticate with Claude:${NC}"
+echo -e "   • Visit the generated URL"
+echo -e "   • Log in to Claude"
+echo -e "   • Copy the authorization code"
+echo
+echo -e "${BOLD}4. Complete setup:${NC}"
+echo -e "   • Run the workflow again with the authorization code"
+echo -e "   • Go to: https://github.com/$REPO_NAME/actions/workflows/claude_code_login.yml"
+echo -e "   • Click ${GREEN}'Run workflow'${NC} → paste your code → ${GREEN}'Run workflow'${NC}"
+echo
+echo -e "${BOLD}5. Start using Claude:${NC}"
+echo -e "   • Create issues or PRs and mention ${CYAN}@claude${NC}"
+echo -e "   • Only ${GREEN}$GITHUB_USERNAME${NC} can trigger Claude responses"
+echo -e "   • Customize your workflow in ${CYAN}claude_code.yml${NC}"
+echo
+log_success "Installation complete! 🎉"
+echo
+echo -e "${CYAN}For more information and troubleshooting:${NC}"
+echo -e "https://github.com/grll/claude-code-login"
