@@ -44,7 +44,7 @@ show_header() {
     cat << 'EOF'
 ╔══════════════════════════════════════════════════════════════════════════╗
 ║                                                                          ║
-║                        ✨ Claude Code OAuth (by @grll) ✨                ║
+║                   ✨ Claude Code OAuth Installer (by @grll) ✨           ║
 ║                                                                          ║
 ╚══════════════════════════════════════════════════════════════════════════╝
 
@@ -129,7 +129,7 @@ else
         echo
         echo -e "${BOLD}Please enter repository name (format: owner/repo-name):${NC}"
         echo -e "${CYAN}Example: $GITHUB_USERNAME/claude-code-login${NC}"
-        read -p "Repository: " REPO_NAME
+        read -p "Repository: " REPO_NAME </dev/tty
         
         if [ -z "$REPO_NAME" ]; then
             log_error "Repository name cannot be empty"
@@ -172,7 +172,7 @@ else
     echo "  • Visit: https://github.com/grll/claude-code-login?tab=readme-ov-file#prerequisites-setting-up-secrets_admin_pat"
     echo
     echo -e "${BOLD}Enter your SECRETS_ADMIN_PAT (input will be hidden):${NC}"
-    read -s PAT_TOKEN
+    read -s PAT_TOKEN </dev/tty
     echo
     
     if [ -z "$PAT_TOKEN" ]; then
