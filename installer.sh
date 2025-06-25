@@ -37,6 +37,33 @@ log_step() {
     echo -e "${MAGENTA}${BOLD}▶ $1${NC}"
 }
 
+# Helper functions for reading input when piped from curl
+read_from_tty() {
+    local prompt="$1"
+    local input
+    if [ -t 0 ]; then
+        # Running interactively
+        read -p "$prompt" input
+    else
+        # Running from pipe, use /dev/tty
+        printf "%s" "$prompt" >/dev/tty
+        read input </dev/tty
+    fi
+    echo "$input"
+}
+
+read_secret_from_tty() {
+    local input
+    if [ -t 0 ]; then
+        # Running interactively
+        read -s input
+    else
+        # Running from pipe, use /dev/tty
+        read -s input </dev/tty
+    fi
+    echo "$input"
+}
+
 # ASCII Art Header
 show_header() {
     clear
@@ -129,7 +156,7 @@ else
         echo
         echo -e "${BOLD}Please enter repository name (format: owner/repo-name):${NC}"
         echo -e "${CYAN}Example: $GITHUB_USERNAME/claude-code-login${NC}"
-        read -p "Repository: " REPO_NAME </dev/tty
+        REPO_NAME=$(read_from_tty "Repository: ")
         
         if [ -z "$REPO_NAME" ]; then
             log_error "Repository name cannot be empty"
@@ -172,7 +199,7 @@ else
     echo "  • Visit: https://github.com/grll/claude-code-login?tab=readme-ov-file#prerequisites-setting-up-secrets_admin_pat"
     echo
     echo -e "${BOLD}Enter your SECRETS_ADMIN_PAT (input will be hidden):${NC}"
-    read -s PAT_TOKEN </dev/tty
+    PAT_TOKEN=$(read_secret_from_tty)
     echo
     
     if [ -z "$PAT_TOKEN" ]; then
