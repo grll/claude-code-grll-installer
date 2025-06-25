@@ -7,7 +7,7 @@ Easy installer for Claude Code OAuth workflows - Set up @claude mentions in your
 ```
 ╔══════════════════════════════════════════════════════════════════════════╗
 ║                                                                          ║
-║                        ✨ Claude Code OAuth (by @grll) ✨                ║
+║                   ✨ Claude Code OAuth Installer (by @grll) ✨           ║
 ║                                                                          ║
 ╚══════════════════════════════════════════════════════════════════════════╝
 

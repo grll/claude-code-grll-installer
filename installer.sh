@@ -377,11 +377,6 @@ if [ "$STASH_CREATED" = true ]; then
 fi
 
 # Step 7: Final instructions
-echo
-echo -e "${CYAN}   ─────────────────────────────────────────────────────────────────────${NC}"
-echo -e "${CYAN}                       【 STEP 1: Generate Login URL 】${NC}"
-echo -e "${CYAN}   ───────────────────────────────────────────────────────────────────────${NC}"
-echo
 log_step "SETUP COMPLETE! Next Steps:"
 echo
 echo -e "${BOLD}1. Run the OAuth workflow (without code):${NC}"
