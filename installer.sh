@@ -225,8 +225,59 @@ else
     fi
 fi
 
-# Step 5: Create workflows directory
-log_step "STEP 5: Creating GitHub Workflows"
+# Step 5: Git repository setup
+log_step "STEP 5: Setting up Git Repository"
+
+# Check if we're in a git repository
+if ! git rev-parse --git-dir > /dev/null 2>&1; then
+    log_info "Not in a git repository, initializing..."
+    git init
+    log_success "Git repository initialized"
+fi
+
+# Save current branch and any uncommitted changes
+ORIGINAL_BRANCH=$(git branch --show-current)
+if [ -z "$ORIGINAL_BRANCH" ]; then
+    # If detached HEAD or no branch, get the commit SHA
+    ORIGINAL_BRANCH=$(git rev-parse HEAD 2>/dev/null || echo "main")
+    IS_DETACHED=true
+else
+    IS_DETACHED=false
+fi
+log_info "Current branch/commit: $ORIGINAL_BRANCH"
+
+# Stash any existing changes (including untracked files)
+log_info "Stashing existing changes..."
+STASH_RESULT=$(git stash push -u -m "Pre-Claude-OAuth-setup stash" 2>&1)
+if echo "$STASH_RESULT" | grep -q "No local changes to save"; then
+    STASH_CREATED=false
+    log_info "No existing changes to stash"
+else
+    STASH_CREATED=true
+    log_success "Existing changes stashed"
+fi
+
+# Check if main branch exists locally
+if git show-ref --verify --quiet refs/heads/main; then
+    MAIN_BRANCH="main"
+elif git show-ref --verify --quiet refs/heads/master; then
+    MAIN_BRANCH="master"
+else
+    # Create main branch if it doesn't exist
+    log_info "Creating main branch..."
+    git checkout -b main
+    MAIN_BRANCH="main"
+    CREATED_MAIN=true
+fi
+
+# Switch to main branch
+if [ "$ORIGINAL_BRANCH" != "$MAIN_BRANCH" ]; then
+    log_info "Switching to $MAIN_BRANCH branch..."
+    git checkout "$MAIN_BRANCH"
+fi
+
+# Step 6: Create workflows
+log_step "STEP 6: Creating GitHub Workflows"
 mkdir -p .github/workflows
 
 # Create claude_code_login.yml
@@ -308,56 +359,8 @@ EOF
 
 log_success "Created claude_code.yml"
 
-# Step 6: Git operations - stash, commit, and push
-log_step "STEP 6: Committing and Pushing Workflows"
-
-# Check if we're in a git repository
-if ! git rev-parse --git-dir > /dev/null 2>&1; then
-    log_info "Not in a git repository, initializing..."
-    git init
-    log_success "Git repository initialized"
-fi
-
-# Save current branch and any uncommitted changes
-ORIGINAL_BRANCH=$(git branch --show-current)
-if [ -z "$ORIGINAL_BRANCH" ]; then
-    # If detached HEAD or no branch, get the commit SHA
-    ORIGINAL_BRANCH=$(git rev-parse HEAD 2>/dev/null || echo "main")
-    IS_DETACHED=true
-else
-    IS_DETACHED=false
-fi
-log_info "Current branch/commit: $ORIGINAL_BRANCH"
-
-# Stash any existing changes (including untracked files)
-log_info "Stashing existing changes..."
-STASH_RESULT=$(git stash push -u -m "Pre-Claude-OAuth-setup stash" 2>&1)
-if echo "$STASH_RESULT" | grep -q "No local changes to save"; then
-    STASH_CREATED=false
-    log_info "No existing changes to stash"
-else
-    STASH_CREATED=true
-    log_success "Existing changes stashed"
-fi
-
-# Check if main branch exists locally
-if git show-ref --verify --quiet refs/heads/main; then
-    MAIN_BRANCH="main"
-elif git show-ref --verify --quiet refs/heads/master; then
-    MAIN_BRANCH="master"
-else
-    # Create main branch if it doesn't exist
-    log_info "Creating main branch..."
-    git checkout -b main
-    MAIN_BRANCH="main"
-    CREATED_MAIN=true
-fi
-
-# Switch to main branch
-if [ "$ORIGINAL_BRANCH" != "$MAIN_BRANCH" ]; then
-    log_info "Switching to $MAIN_BRANCH branch..."
-    git checkout "$MAIN_BRANCH"
-fi
+# Step 7: Commit and push workflows
+log_step "STEP 7: Committing and Pushing Workflows"
 
 # Add the workflow files
 log_info "Adding workflow files to git..."
@@ -455,7 +458,7 @@ if [ "$STASH_CREATED" = true ]; then
     fi
 fi
 
-# Step 7: Final instructions
+# Step 8: Final instructions
 log_step "SETUP COMPLETE! Next Steps:"
 echo
 
