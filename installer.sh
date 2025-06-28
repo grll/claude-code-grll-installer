@@ -155,7 +155,71 @@ if [ -n "$REPO_ARG" ]; then
 else
     # Try to get current repo
     CURRENT_REPO=$(gh repo view --json name -q ".name" 2>/dev/null)
-    if [ $? -eq 0 ] && [ -n "$CURRENT_REPO" ]; then
+    GH_REPO_EXIT_CODE=$?
+    
+    # Check if gh repo view failed due to no git repository
+    if [ $GH_REPO_EXIT_CODE -ne 0 ]; then
+        GH_ERROR=$(gh repo view 2>&1)
+        if echo "$GH_ERROR" | grep -q "not a git repository"; then
+            log_error "Not in a git repository"
+            echo
+            log_info "This directory is not a git repository. Initialize it first:"
+            echo -e "  ${CYAN}git init${NC}"
+            echo
+            log_info "Then create and publish it to GitHub:"
+            echo -e "  ${CYAN}gh repo create $GITHUB_USERNAME/your-repo-name --source=. --private${NC}"
+            echo -e "  ${CYAN}# or --public for a public repository${NC}"
+            exit 1
+        elif echo "$GH_ERROR" | grep -q "no git remotes found"; then
+            log_warning "Local git repository exists but not published to GitHub"
+            echo
+            log_info "This repository hasn't been published to GitHub yet."
+            echo -e "${BOLD}Would you like to create it on GitHub now? (y/N):${NC} "
+            CREATE_REPO=$(read_from_tty "")
+            
+            if [[ "$CREATE_REPO" =~ ^[Yy]$ ]]; then
+                echo
+                echo -e "${BOLD}Enter repository name (without owner):${NC}"
+                echo -e "${CYAN}Example: claude-code-login${NC}"
+                REPO_NAME_ONLY=$(read_from_tty "Repository name: ")
+                
+                if [ -z "$REPO_NAME_ONLY" ]; then
+                    log_error "Repository name cannot be empty"
+                    exit 1
+                fi
+                
+                echo -e "${BOLD}Make repository public? (y/N):${NC} "
+                IS_PUBLIC=$(read_from_tty "")
+                
+                if [[ "$IS_PUBLIC" =~ ^[Yy]$ ]]; then
+                    VISIBILITY="--public"
+                else
+                    VISIBILITY="--private"
+                fi
+                
+                log_info "Creating repository on GitHub..."
+                if gh repo create "$GITHUB_USERNAME/$REPO_NAME_ONLY" --source=. $VISIBILITY; then
+                    log_success "Repository created and published to GitHub"
+                    REPO_NAME="$GITHUB_USERNAME/$REPO_NAME_ONLY"
+                else
+                    log_error "Failed to create repository on GitHub"
+                    exit 1
+                fi
+            else
+                log_info "Create and publish your repository to GitHub first:"
+                echo -e "  ${CYAN}gh repo create $GITHUB_USERNAME/your-repo-name --source=. --private${NC}"
+                echo -e "  ${CYAN}# or --public for a public repository${NC}"
+                exit 1
+            fi
+        else
+            # Other error - proceed to manual input
+            log_warning "Could not detect current repository"
+            echo
+            echo -e "${BOLD}Please enter repository name (format: owner/repo-name):${NC}"
+            echo -e "${CYAN}Example: $GITHUB_USERNAME/claude-code-login${NC}"
+            REPO_NAME=$(read_from_tty "Repository: ")
+        fi
+    elif [ -n "$CURRENT_REPO" ]; then
         REPO_OWNER=$(gh repo view --json owner -q ".owner.login" 2>/dev/null)
         REPO_NAME="${REPO_OWNER}/${CURRENT_REPO}"
         log_success "Found current repository: $REPO_NAME"
