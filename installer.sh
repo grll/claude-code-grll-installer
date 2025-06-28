@@ -375,7 +375,7 @@ else
 - claude_code_login.yml: OAuth authentication workflow
 - claude_code.yml: PR assistant workflow for @$GITHUB_USERNAME
 
-🤖 Generated with Claude Code GRLL Installer
+🤖 Generated with Claude OAuth Installer
 
 Co-authored-by: grll <noreply@github.com>"
     
