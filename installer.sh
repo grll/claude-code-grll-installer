@@ -318,15 +318,45 @@ if ! git rev-parse --git-dir > /dev/null 2>&1; then
     log_success "Git repository initialized"
 fi
 
-# Stash any existing changes
+# Save current branch and any uncommitted changes
+ORIGINAL_BRANCH=$(git branch --show-current)
+if [ -z "$ORIGINAL_BRANCH" ]; then
+    # If detached HEAD or no branch, get the commit SHA
+    ORIGINAL_BRANCH=$(git rev-parse HEAD 2>/dev/null || echo "main")
+    IS_DETACHED=true
+else
+    IS_DETACHED=false
+fi
+log_info "Current branch/commit: $ORIGINAL_BRANCH"
+
+# Stash any existing changes (including untracked files)
 log_info "Stashing existing changes..."
-STASH_RESULT=$(git stash push -m "Pre-Claude-OAuth-setup stash" 2>&1)
+STASH_RESULT=$(git stash push -u -m "Pre-Claude-OAuth-setup stash" 2>&1)
 if echo "$STASH_RESULT" | grep -q "No local changes to save"; then
     STASH_CREATED=false
     log_info "No existing changes to stash"
 else
     STASH_CREATED=true
     log_success "Existing changes stashed"
+fi
+
+# Check if main branch exists locally
+if git show-ref --verify --quiet refs/heads/main; then
+    MAIN_BRANCH="main"
+elif git show-ref --verify --quiet refs/heads/master; then
+    MAIN_BRANCH="master"
+else
+    # Create main branch if it doesn't exist
+    log_info "Creating main branch..."
+    git checkout -b main
+    MAIN_BRANCH="main"
+    CREATED_MAIN=true
+fi
+
+# Switch to main branch
+if [ "$ORIGINAL_BRANCH" != "$MAIN_BRANCH" ]; then
+    log_info "Switching to $MAIN_BRANCH branch..."
+    git checkout "$MAIN_BRANCH"
 fi
 
 # Add the workflow files
@@ -336,9 +366,10 @@ git add .github/workflows/claude_code_login.yml .github/workflows/claude_code.ym
 # Check if there are changes to commit
 if git diff --cached --quiet; then
     log_warning "No changes to commit (workflows may already exist)"
+    COMMITTED=false
 else
     # Commit the changes
-    log_info "Committing workflow files..."
+    log_info "Committing workflow files to $MAIN_BRANCH branch..."
     git commit -m "Add Claude Code OAuth workflows
 
 - claude_code_login.yml: OAuth authentication workflow
@@ -348,7 +379,8 @@ else
 
 Co-authored-by: grll <noreply@github.com>"
     
-    log_success "Workflows committed"
+    log_success "Workflows committed to $MAIN_BRANCH branch"
+    COMMITTED=true
     
     # Push to remote
     log_info "Pushing to remote repository..."
@@ -358,19 +390,23 @@ Co-authored-by: grll <noreply@github.com>"
         log_warning "No remote 'origin' found. You may need to set up a remote and push manually."
         log_info "To set up remote: git remote add origin https://github.com/$REPO_NAME.git"
     else
-        # Get current branch
-        CURRENT_BRANCH=$(git branch --show-current)
-        if [ -z "$CURRENT_BRANCH" ]; then
-            CURRENT_BRANCH="main"
-        fi
-        
-        # Try to push
-        if git push origin "$CURRENT_BRANCH"; then
-            log_success "Workflows pushed to remote repository"
+        # Try to push main branch
+        if git push origin "$MAIN_BRANCH"; then
+            log_success "Workflows pushed to remote repository ($MAIN_BRANCH branch)"
         else
             log_warning "Failed to push. You may need to push manually:"
-            echo "  git push origin $CURRENT_BRANCH"
+            echo "  git push origin $MAIN_BRANCH"
         fi
+    fi
+fi
+
+# Return to original branch/commit
+if [ "$ORIGINAL_BRANCH" != "$MAIN_BRANCH" ]; then
+    log_info "Returning to original branch/commit: $ORIGINAL_BRANCH"
+    if [ "$IS_DETACHED" = true ]; then
+        git checkout "$ORIGINAL_BRANCH" 2>/dev/null || log_warning "Could not return to original commit"
+    else
+        git checkout "$ORIGINAL_BRANCH"
     fi
 fi
 
