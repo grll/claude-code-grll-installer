@@ -423,6 +423,12 @@ fi
 # Step 7: Final instructions
 log_step "SETUP COMPLETE! Next Steps:"
 echo
+echo -e "${RED}${BOLD}⚠️  IMPORTANT: GitHub App Required ⚠️${NC}"
+echo -e "${BOLD}For @claude to work, you MUST install the official Anthropic GitHub App:${NC}"
+echo -e "   • Install here: ${CYAN}https://github.com/settings/installations/68058532${NC}"
+echo -e "   • Grant access to: ${GREEN}$REPO_NAME${NC}"
+echo -e "   • Without this app, @claude mentions will fail!"
+echo
 echo -e "${BOLD}1. Run the OAuth workflow (without code):${NC}"
 echo -e "   • Go to: https://github.com/$REPO_NAME/actions/workflows/claude_code_login.yml"
 echo -e "   • Click ${GREEN}'Run workflow'${NC} → ${GREEN}'Run workflow'${NC} (leave code empty)"
