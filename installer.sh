@@ -367,10 +367,33 @@ git add .github/workflows/claude_code_login.yml .github/workflows/claude_code.ym
 if git diff --cached --quiet; then
     log_warning "No changes to commit (workflows may already exist)"
     COMMITTED=false
+    USER_CONSENTED=true  # No need to ask since nothing to commit
 else
-    # Commit the changes
-    log_info "Committing workflow files to $MAIN_BRANCH branch..."
-    git commit -m "Add Claude Code OAuth workflows
+    # Ask for user consent before committing
+    echo
+    echo -e "${BOLD}${YELLOW}⚠️  Permission Required${NC}"
+    echo -e "${BOLD}The installer needs to commit and push workflow files to the $MAIN_BRANCH branch.${NC}"
+    echo
+    echo -e "${GREEN}✓ Recommended:${NC} Give consent for a smoother experience"
+    echo -e "  • We'll automatically switch to $MAIN_BRANCH branch"
+    echo -e "  • Commit the workflow files"
+    echo -e "  • Push to remote repository"
+    echo -e "  • ${BOLD}Return you to your current branch/state${NC}"
+    echo
+    echo -e "${YELLOW}✗ Without consent:${NC}"
+    echo -e "  • You'll need to manually commit and push the workflows"
+    echo -e "  • The setup instructions will include these manual steps"
+    echo
+    echo -e "${BOLD}Allow automatic commit and push to $MAIN_BRANCH? (y/N):${NC} "
+    CONSENT=$(read_from_tty "")
+    
+    if [[ "$CONSENT" =~ ^[Yy]$ ]]; then
+        USER_CONSENTED=true
+        log_success "Consent granted. Proceeding with automatic commit and push."
+        
+        # Commit the changes
+        log_info "Committing workflow files to $MAIN_BRANCH branch..."
+        git commit -m "Add Claude Code OAuth workflows
 
 - claude_code_login.yml: OAuth authentication workflow
 - claude_code.yml: PR assistant workflow for @$GITHUB_USERNAME
@@ -378,25 +401,37 @@ else
 🤖 Generated with Claude OAuth Installer
 
 Co-authored-by: grll <noreply@github.com>"
-    
-    log_success "Workflows committed to $MAIN_BRANCH branch"
-    COMMITTED=true
-    
-    # Push to remote
-    log_info "Pushing to remote repository..."
-    
-    # Check if we have a remote
-    if ! git remote | grep -q origin; then
-        log_warning "No remote 'origin' found. You may need to set up a remote and push manually."
-        log_info "To set up remote: git remote add origin https://github.com/$REPO_NAME.git"
-    else
-        # Try to push main branch
-        if git push origin "$MAIN_BRANCH"; then
-            log_success "Workflows pushed to remote repository ($MAIN_BRANCH branch)"
+        
+        log_success "Workflows committed to $MAIN_BRANCH branch"
+        COMMITTED=true
+        
+        # Push to remote
+        log_info "Pushing to remote repository..."
+        
+        # Check if we have a remote
+        if ! git remote | grep -q origin; then
+            log_warning "No remote 'origin' found. You may need to set up a remote and push manually."
+            log_info "To set up remote: git remote add origin https://github.com/$REPO_NAME.git"
+            PUSHED=false
         else
-            log_warning "Failed to push. You may need to push manually:"
-            echo "  git push origin $MAIN_BRANCH"
+            # Try to push main branch
+            if git push origin "$MAIN_BRANCH"; then
+                log_success "Workflows pushed to remote repository ($MAIN_BRANCH branch)"
+                PUSHED=true
+            else
+                log_warning "Failed to push. You may need to push manually:"
+                echo "  git push origin $MAIN_BRANCH"
+                PUSHED=false
+            fi
         fi
+    else
+        USER_CONSENTED=false
+        COMMITTED=false
+        PUSHED=false
+        log_warning "Consent not granted. You'll need to manually commit and push the workflows."
+        
+        # Reset the staged files
+        git reset HEAD .github/workflows/claude_code_login.yml .github/workflows/claude_code.yml
     fi
 fi
 
@@ -423,6 +458,29 @@ fi
 # Step 7: Final instructions
 log_step "SETUP COMPLETE! Next Steps:"
 echo
+
+# Show manual commit instructions if user didn't consent
+if [ "$USER_CONSENTED" = false ]; then
+    echo -e "${RED}${BOLD}⚠️  MANUAL ACTION REQUIRED ⚠️${NC}"
+    echo -e "${BOLD}You chose not to automatically commit the workflows. Please run these commands:${NC}"
+    echo
+    echo -e "${CYAN}# 1. Switch to $MAIN_BRANCH branch${NC}"
+    echo -e "   git checkout $MAIN_BRANCH"
+    echo
+    echo -e "${CYAN}# 2. Add and commit the workflow files${NC}"
+    echo -e "   git add .github/workflows/claude_code_login.yml .github/workflows/claude_code.yml"
+    echo -e "   git commit -m \"Add Claude Code OAuth workflows\""
+    echo
+    echo -e "${CYAN}# 3. Push to remote${NC}"
+    echo -e "   git push origin $MAIN_BRANCH"
+    echo
+    echo -e "${CYAN}# 4. Return to your branch (optional)${NC}"
+    echo -e "   git checkout $ORIGINAL_BRANCH"
+    echo
+    echo -e "${YELLOW}Complete these steps before continuing with the instructions below!${NC}"
+    echo
+fi
+
 echo -e "${RED}${BOLD}⚠️  IMPORTANT: GitHub App Required ⚠️${NC}"
 echo -e "${BOLD}For @claude to work, you MUST install the official Anthropic GitHub App:${NC}"
 echo -e "   • Install here: ${CYAN}https://github.com/settings/installations/68058532${NC}"
