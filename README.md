@@ -45,14 +45,14 @@ This installer automatically sets up Claude Code OAuth integration for your GitH
 Make sure you `cd` into your repo, have `gh` and `jq` available in your environment.
 
 ```bash
-bash <(curl -fsSL https://raw.githubusercontent.com/grll/claude-code-grll-installer/main/installer.sh)
+bash <(curl -fsSL https://raw.githubusercontent.com/grll/claude-installer/main/installer.sh)
 ```
 
 ### Manual installation:
 
 ```bash
 # Download the installer
-curl -fsSL https://raw.githubusercontent.com/grll/claude-code-grll-installer/main/installer.sh -o installer.sh
+curl -fsSL https://raw.githubusercontent.com/grll/claude-installer/main/installer.sh -o installer.sh
 
 # Make it executable
 chmod +x installer.sh
@@ -168,8 +168,8 @@ OPTIONS:
 ### Getting Help
 
 - 📖 [Claude Code Login Documentation](https://github.com/grll/claude-code-login)
-- 🐛 [Report Issues](https://github.com/grll/claude-code-grll-installer/issues)
-- 💬 [Discussions](https://github.com/grll/claude-code-grll-installer/discussions)
+- 🐛 [Report Issues](https://github.com/grll/claude-installer/issues)
+- 💬 [Discussions](https://github.com/grll/claude-installer/discussions)
 
 ## Related Projects
 
