@@ -154,13 +154,26 @@ if [ -n "$REPO_ARG" ]; then
     log_info "Using repository from --repo flag: $REPO_NAME"
 else
     # Try to get current repo
+    set +e  # Temporarily disable exit on error
     CURRENT_REPO=$(gh repo view --json name -q ".name" 2>/dev/null)
     GH_REPO_EXIT_CODE=$?
+    set -e  # Re-enable exit on error
     
     # Check if gh repo view failed due to no git repository
     if [ $GH_REPO_EXIT_CODE -ne 0 ]; then
+        set +e  # Temporarily disable exit on error
         GH_ERROR=$(gh repo view 2>&1)
-        if echo "$GH_ERROR" | grep -q "not a git repository"; then
+        set -e  # Re-enable exit on error
+        
+        # Temporarily disable set -e for grep commands
+        set +e
+        echo "$GH_ERROR" | grep -q "not a git repository"
+        NOT_GIT_REPO=$?
+        echo "$GH_ERROR" | grep -q "no git remotes found"
+        NO_REMOTES=$?
+        set -e
+        
+        if [ $NOT_GIT_REPO -eq 0 ]; then
             log_error "Not in a git repository"
             echo
             log_info "This directory is not a git repository. Initialize it first:"
@@ -170,7 +183,7 @@ else
             echo -e "  ${CYAN}gh repo create $GITHUB_USERNAME/your-repo-name --source=. --private${NC}"
             echo -e "  ${CYAN}# or --public for a public repository${NC}"
             exit 1
-        elif echo "$GH_ERROR" | grep -q "no git remotes found"; then
+        elif [ $NO_REMOTES -eq 0 ]; then
             log_warning "Local git repository exists but not published to GitHub"
             echo
             log_info "This repository hasn't been published to GitHub yet."
@@ -220,7 +233,9 @@ else
             REPO_NAME=$(read_from_tty "Repository: ")
         fi
     elif [ -n "$CURRENT_REPO" ]; then
+        set +e  # Temporarily disable exit on error
         REPO_OWNER=$(gh repo view --json owner -q ".owner.login" 2>/dev/null)
+        set -e  # Re-enable exit on error
         REPO_NAME="${REPO_OWNER}/${CURRENT_REPO}"
         log_success "Found current repository: $REPO_NAME"
     else
@@ -259,7 +274,13 @@ log_success "Repository verified: $REPO_NAME"
 # Step 4: Check for existing secret
 log_step "STEP 4: Checking Repository Secrets"
 SECRET_EXISTS=false
-if gh secret list --repo "$REPO_NAME" | grep -q "SECRETS_ADMIN_PAT"; then
+# Temporarily disable set -e for grep
+set +e
+gh secret list --repo "$REPO_NAME" | grep -q "SECRETS_ADMIN_PAT"
+SECRET_CHECK=$?
+set -e
+
+if [ $SECRET_CHECK -eq 0 ]; then
     SECRET_EXISTS=true
     log_success "SECRETS_ADMIN_PAT already exists"
 else
@@ -292,13 +313,6 @@ fi
 # Step 5: Git repository setup
 log_step "STEP 5: Setting up Git Repository"
 
-# Check if we're in a git repository
-if ! git rev-parse --git-dir > /dev/null 2>&1; then
-    log_info "Not in a git repository, initializing..."
-    git init
-    log_success "Git repository initialized"
-fi
-
 # Save current branch and any uncommitted changes
 ORIGINAL_BRANCH=$(git branch --show-current)
 if [ -z "$ORIGINAL_BRANCH" ]; then
@@ -312,13 +326,32 @@ log_info "Current branch/commit: $ORIGINAL_BRANCH"
 
 # Stash any existing changes (including untracked files)
 log_info "Stashing existing changes..."
+set +e  # Temporarily disable exit on error
 STASH_RESULT=$(git stash push -u -m "Pre-Claude-OAuth-setup stash" 2>&1)
-if echo "$STASH_RESULT" | grep -q "No local changes to save"; then
+STASH_EXIT_CODE=$?
+set -e  # Re-enable exit on error
+
+# Check stash result
+set +e
+echo "$STASH_RESULT" | grep -q "No local changes to save"
+NO_CHANGES=$?
+echo "$STASH_RESULT" | grep -q "You do not have the initial commit yet"
+NO_INITIAL_COMMIT=$?
+set -e
+
+if [ $NO_CHANGES -eq 0 ] || [ $NO_INITIAL_COMMIT -eq 0 ]; then
     STASH_CREATED=false
-    log_info "No existing changes to stash"
-else
+    if [ $NO_INITIAL_COMMIT -eq 0 ]; then
+        log_info "No initial commit yet - skipping stash"
+    else
+        log_info "No existing changes to stash"
+    fi
+elif [ $STASH_EXIT_CODE -eq 0 ]; then
     STASH_CREATED=true
     log_success "Existing changes stashed"
+else
+    STASH_CREATED=false
+    log_warning "Failed to stash changes: $STASH_RESULT"
 fi
 
 # Check if main branch exists locally
@@ -476,7 +509,12 @@ Co-authored-by: grll <noreply@github.com>"
         log_info "Pushing to remote repository..."
         
         # Check if we have a remote
-        if ! git remote | grep -q origin; then
+        set +e
+        git remote | grep -q origin
+        REMOTE_CHECK=$?
+        set -e
+        
+        if [ $REMOTE_CHECK -ne 0 ]; then
             log_warning "No remote 'origin' found. You may need to set up a remote and push manually."
             log_info "To set up remote: git remote add origin https://github.com/$REPO_NAME.git"
             PUSHED=false
