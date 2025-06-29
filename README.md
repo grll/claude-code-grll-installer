@@ -188,7 +188,7 @@ Contributions welcome! Please read our contributing guidelines and submit pull r
 
 <div align="center">
 
-**Made with ❤️ by [@grll](https://github.com/grll)**
+**Made by [@grll](https://github.com/grll)**
 
 *Simplifying Claude Code OAuth setup, one repo at a time.*
 
